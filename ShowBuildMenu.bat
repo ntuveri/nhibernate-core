@@ -1,11 +1,11 @@
 @echo off
 pushd %~dp0
 
-set NANT=%~dp0Tools\nant\bin\NAnt.exe -t:net-3.5
-set BUILDTOOL=%~dp0Tools\BuildTool\bin\Release\BuildTool.exe
-set AVAILABLE_CONFIGURATIONS=%~dp0available-test-configurations
-set CURRENT_CONFIGURATION=%~dp0current-test-configuration
-set NUNIT=%~dp0Tools\nunit\nunit-x86.exe
+set NANT="%~dp0Tools\nant\bin\NAnt.exe" -t:net-3.5
+set BUILDTOOL="%~dp0Tools\BuildTool\bin\Release\BuildTool.exe"
+set AVAILABLE_CONFIGURATIONS="%~dp0available-test-configurations"
+set CURRENT_CONFIGURATION="%~dp0current-test-configuration"
+set NUNIT="%~dp0Tools\nunit\nunit-x86.exe"
 
 :main-menu
 echo ========================= NHIBERNATE BUILD MENU ==========================
