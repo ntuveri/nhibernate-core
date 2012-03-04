@@ -202,6 +202,9 @@ namespace NHibernate.Hql.Ast
 				case TypeCode.Decimal:
 					SetText("decimal");
 					break;
+				case TypeCode.Single:
+					SetText("single");
+					break;
 				case TypeCode.DateTime:
 					SetText("datetime");
 					break;
@@ -349,6 +352,14 @@ namespace NHibernate.Hql.Ast
 	{
 		public HqlWhere(IASTFactory factory, HqlExpression expression)
 			: base(HqlSqlWalker.WHERE, "where", factory, expression)
+		{
+		}
+	}
+
+	public class HqlHaving : HqlStatement
+	{
+		public HqlHaving(IASTFactory factory, HqlExpression expression)
+			: base(HqlSqlWalker.HAVING, "having", factory, expression)
 		{
 		}
 	}
