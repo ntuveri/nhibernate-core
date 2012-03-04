@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using NHibernate.DomainModel.Northwind.Entities;
 using NUnit.Framework;
 using SharpTestsEx;
+
+using NHibernate.Linq;
 
 namespace NHibernate.Test.Linq
 {
@@ -217,12 +220,42 @@ namespace NHibernate.Test.Linq
 		}
 
 		[Test]
-		[Ignore("Broken, please fix. See NH-2707")]
+		//[Ignore("Broken, please fix. See NH-2707")]
 		public void CanProjectCollections()
 		{
-			var query = db.Orders.Select(o => o.OrderLines);
-			var result = query.ToList();
-			Assert.Pass();
+            // TODO: investigate use of filters to translate query based on mapped collection properties
+
+            var query = db.Orders.Select(o => o.OrderLines);
+            //var query = db.Orders.Fetch(o => o.OrderLines).Select(o => o.OrderLines);
+            var result = query.ToList();
+
+            //IQueryable<IEnumerable<OrderLine>> query2a = 
+            //    db.Orders.Select(o => o.OrderLines.Where(ol => ol.Quantity > 5));
+            //var result2a = query2a.ToList();
+
+            //var query2b = from o in db.Orders
+            //        from ol in o.OrderLines
+            //        where ol.Quantity > 5
+            //        select (IEnumerable<OrderLine>) o.OrderLines;
+            //var result2b = query2b.ToList();
+
+            //IQueryable<int> query3a = db.Orders.Select(o => o.OrderLines.Count());
+            //var result3a = query3a.ToList();
+
+            //IQueryable<int> query3b = from o in db.Orders
+            //        from ol in db.OrderLines
+            //        select o.OrderLines.Count();
+            //var result3b = query3b.ToList();
+
+
+            
+            //var query = session.CreateQuery("select ol from Order as o " +
+            //    "left join o.OrderLines as ol");
+            //var result = query.List();
+
+            //var query = session.CreateQuery("select elements(o.OrderLines) from Order o");
+            //var result = query.List();
+            Assert.Pass();
 		}
 
 		[Test]
