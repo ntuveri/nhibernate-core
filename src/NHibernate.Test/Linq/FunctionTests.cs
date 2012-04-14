@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Collections.Generic;
+using NHibernate.Dialect;
 using NHibernate.DomainModel;
 using NHibernate.DomainModel.Northwind.Entities;
 using NHibernate.Linq;
@@ -12,23 +13,42 @@ namespace NHibernate.Test.Linq
 	public class FunctionTests : LinqTestCase
 	{
 		[Test]
-		public void SubstringFunction()
+		public void SubstringFunction2()
 		{
-			var query = from e in db.Employees
-						where e.FirstName.Substring(1, 2) == "An"
-						select e;
+			if (Dialect is FirebirdDialect)
+				Assert.Ignore("Firebird before 2.0 only support integer literals for substring() - NH generates parameters.");
 
-			ObjectDumper.Write(query);
+			var query = (from e in db.Employees
+						 where e.FirstName.Substring(0, 2) == "An"
+						 select e).ToList();
+
+			Assert.That(query.Count, Is.EqualTo(2));
+		}
+
+		[Test]
+		public void SubstringFunction1()
+		{
+			if (Dialect is FirebirdDialect)
+				Assert.Ignore("Firebird before 2.0 only support integer literals for substring() - NH generates parameters.");
+
+			var query = (from e in db.Employees
+						 where e.FirstName.Substring(3) == "rew"
+						 select e).ToList();
+
+			Assert.That(query.Count, Is.EqualTo(1));
+			Assert.That(query[0].FirstName, Is.EqualTo("Andrew"));
 		}
 
 		[Test]
 		public void LeftFunction()
 		{
-			var query = from e in db.Employees
-                        where e.FirstName.Substring(1, 2) == "An"
-                        select e.FirstName.Substring(3);
+			var query = (from e in db.Employees
+						 where e.FirstName.Substring(0, 2) == "An"
+						 select e.FirstName.Substring(3)).ToList();
 
-			ObjectDumper.Write(query);
+			Assert.That(query.Count, Is.EqualTo(2));
+			Assert.That(query[0], Is.EqualTo("rew")); //Andrew
+			Assert.That(query[1], Is.EqualTo("e")); //Anne
 		}
 
 		[Test]
