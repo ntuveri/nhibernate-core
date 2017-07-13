@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Collections;
+using NHibernate.SqlCommand.Parser;
+using System.Text.RegularExpressions;
 
 namespace NHibernate.SqlCommand
 {
@@ -229,47 +231,58 @@ namespace NHibernate.SqlCommand
 		/// </remarks>
 		public static SqlString Parse(string sql)
 		{
-			var result = new SqlStringBuilder();
-			var content = new StringBuilder();
+			return new SqlString(ParseParts(sql));
+		}
 
-			bool inQuote = false;
-			foreach (char ch in sql)
+		private static IEnumerable<object> ParseParts(string text)
 			{
+			if (string.IsNullOrEmpty(text)) yield break;
+
+			int offset = 0;
+			int maxOffset = text.Length;
+			int partOffset = 0;
+
+			while (offset < maxOffset)
+			{
+				var ch = text[offset];
 				switch (ch)
 				{
-					case '?':
-						if (inQuote)
+					case '?':      // Parameter marker
+						if (offset > partOffset)
 						{
-							content.Append(ch);
+							yield return text.Substring(partOffset, offset - partOffset);
 						}
-						else
+						yield return Parameter.Placeholder;
+						partOffset = offset += 1;
+						break;
+					case '\'':      // String literals
+					case '\"':      // ANSI quoted identifiers
+					case '[':       // Sql Server quoted indentifiers
+						offset += SqlParserUtils.ReadDelimitedText(text, maxOffset, offset);
+						continue;
+					case '/':
+						if (offset + 1 < maxOffset && text[offset + 1] == '*')
 						{
-							if (content.Length > 0)
+							offset += SqlParserUtils.ReadMultilineComment(text, maxOffset, offset);
+							continue;
+						}
+						break;
+					case '-':
+						if (offset + 1 < maxOffset && text[offset + 1] == '-')
 							{
-								result.Add(content.ToString());
-								content.Length = 0;
+							offset += SqlParserUtils.ReadLineComment(text, maxOffset, offset);
+							continue;
 							}
-							result.AddParameter();
+						break;
 						}
-						break;
 
-					case '\'':
-						inQuote = !inQuote;
-						content.Append(ch);
-						break;
-
-					default:
-						content.Append(ch);
-						break;
+				offset++;
 				}
-			}
 
-			if (content.Length > 0)
+			if (maxOffset > partOffset)
 			{
-				result.Add(content.ToString());
+				yield return text.Substring(partOffset, offset - partOffset);
 			}
-
-			return result.ToSqlString();
 		}
 
 		#endregion
@@ -288,12 +301,6 @@ namespace NHibernate.SqlCommand
 		public int Length
 		{
 			get { return _length; }
-		}
-
-		[Obsolete("Use SqlString.Count and SqlString.GetEnumerator properties")]
-		public ICollection Parts
-		{
-			get { return this; }
 		}
 
 		#endregion
@@ -351,6 +358,7 @@ namespace NHibernate.SqlCommand
 		/// Combines all SqlParts that are strings and next to each other into
 		/// one SqlPart.
 		/// </remarks>
+		[Obsolete]
 		public SqlString Compact()
 		{
 			// FIXME: As of january 2012, the SqlString is always in compact form. Once this is settled, perhaps we should remove SqlString.Compact()?
@@ -557,6 +565,19 @@ namespace NHibernate.SqlCommand
 			return SplitParts(splitter).ToArray();
 		}
 
+		internal SqlString[] SplitWithRegex(string pattern)
+		{
+			var sql = Regex.Split(ToString(), pattern).Select(s => SqlString.Parse(s)).ToArray();
+			var parameters = _parameters.Values;
+			int i = 0;
+			foreach (var p in sql.SelectMany(s => s.GetParameters()))
+			{
+				p.BackTrack = parameters[i].BackTrack;
+				i++;
+			}
+			return sql;
+		}
+
 		private IEnumerable<SqlString> SplitParts(string splitter)
 		{
 			var startIndex = 0;
@@ -585,6 +606,19 @@ namespace NHibernate.SqlCommand
 		{
 			return value != null
 				&& value.Length <= _length
+				&& IndexOf(value, 0, value.Length, StringComparison.InvariantCultureIgnoreCase) >= 0;
+		}
+
+		/// <summary>
+		/// Determines whether the sqlString matches the specified System.String,
+		/// using case-insensitive comparison
+		/// </summary>
+		/// <param name="value">The System.String to match</param>
+		/// <returns>true if the SqlString matches the value.</returns>
+		public bool EqualsCaseInsensitive(string value)
+		{
+			return value != null
+				&& value.Length == _length
 				&& IndexOf(value, 0, value.Length, StringComparison.InvariantCultureIgnoreCase) >= 0;
 		}
 
@@ -910,6 +944,11 @@ namespace NHibernate.SqlCommand
 		public override string ToString()
 		{
 			return ToString(0, _length);
+		}
+
+		public string ToString(int startIndex)
+		{
+			return ToString(startIndex, _length - startIndex);
 		}
 
 		public string ToString(int startIndex, int length)

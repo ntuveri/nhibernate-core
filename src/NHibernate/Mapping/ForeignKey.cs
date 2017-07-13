@@ -174,22 +174,20 @@ namespace NHibernate.Mapping
 		{
 			if (!IsReferenceToPrimaryKey)
 			{
-				StringBuilder result = new StringBuilder();
+				var result = new StringBuilder();
 				result.Append(GetType().FullName)
 					.Append('(')
 					.Append(Table.Name)
-					.Append(ArrayHelper.ToStringArray((ICollection)Columns))
+					.Append(StringHelper.Join(", " , Columns))
 					.Append(" ref-columns:")
 					.Append('(')
-					.Append(ArrayHelper.ToStringArray((ICollection)ReferencedColumns))
+					.Append(StringHelper.Join(", ", ReferencedColumns))
 					.Append(") as ")
 					.Append(Name);
 				return result.ToString();
 			}
-			else
-			{
-				return base.ToString();
-			}
+
+			return base.ToString();
 		}
 
 		public bool HasPhysicalConstraint

@@ -14,6 +14,7 @@ namespace NHibernate.Mapping.ByCode
 		private readonly IModelExplicitDeclarationsHolder explicitDeclarationsHolder;
 		private readonly ICandidatePersistentMembersProvider membersProvider;
 		private readonly IModelInspector modelInspector;
+		private readonly List<Import> imports = new List<Import>();
 
 		public ModelMapper() : this(new ExplicitlyDeclaredModel()) { }
 
@@ -525,10 +526,20 @@ namespace NHibernate.Mapping.ByCode
 			customizeAction(customizer);
 		}
 
-		public void Component<TComponent>(Action<IComponentMapper<TComponent>> customizeAction) where TComponent : class
+		public void Component<TComponent>(Action<IComponentMapper<TComponent>> customizeAction)
 		{
 			var customizer = new ComponentCustomizer<TComponent>(explicitDeclarationsHolder, customizerHolder);
 			customizeAction(customizer);
+		}
+
+		public void Import<TImportClass>()
+		{
+			Import<TImportClass>(typeof(TImportClass).Name);
+		}
+
+		public void Import<TImportClass>(string rename)
+		{
+			imports.Add(new Import(typeof(TImportClass), rename));
 		}
 
 		public HbmMapping CompileMappingFor(IEnumerable<System.Type> types)
@@ -544,13 +555,14 @@ namespace NHibernate.Mapping.ByCode
 			System.Type firstType = typeToMap.FirstOrDefault();
 			if (firstType != null && typeToMap.All(t => t.Assembly.Equals(firstType.Assembly)))
 			{
-				defaultAssemblyName = firstType.Assembly.GetName().Name;
+				//NH-2831: always use the full name of the assembly because it may come from GAC
+				defaultAssemblyName = firstType.Assembly.GetName().FullName;
 			}
-			if (firstType != null && typeToMap.All(t => t.Namespace.Equals(firstType.Namespace)))
+			if (firstType != null && typeToMap.All(t => t.Namespace == firstType.Namespace))
 			{
 				defaultNamespace = firstType.Namespace;
 			}
-			var mapping = new HbmMapping {assembly = defaultAssemblyName, @namespace = defaultNamespace};
+			var mapping = NewHbmMapping(defaultAssemblyName, defaultNamespace);
 			foreach (System.Type type in RootClasses(typeToMap))
 			{
 				MapRootClass(type, mapping);
@@ -570,18 +582,29 @@ namespace NHibernate.Mapping.ByCode
 			}
 			var typeToMap = new HashSet<System.Type>(types);
 
+			//NH-2831: always use the full name of the assembly because it may come from GAC
 			foreach (System.Type type in RootClasses(typeToMap))
 			{
-				var mapping = new HbmMapping {assembly = type.Assembly.GetName().Name, @namespace = type.Namespace};
+				var mapping = NewHbmMapping(type.Assembly.GetName().FullName, type.Namespace);
 				MapRootClass(type, mapping);
 				yield return mapping;
 			}
 			foreach (System.Type type in Subclasses(typeToMap))
 			{
-				var mapping = new HbmMapping {assembly = type.Assembly.GetName().Name, @namespace = type.Namespace};
+				var mapping = NewHbmMapping(type.Assembly.GetName().FullName, type.Namespace);
 				AddSubclassMapping(mapping, type);
 				yield return mapping;
 			}
+		}
+
+		private HbmMapping NewHbmMapping(string defaultAssemblyName, string defaultNamespace)
+		{
+			var hbmMapping = new HbmMapping {assembly = defaultAssemblyName, @namespace = defaultNamespace};
+
+			imports.ForEach(i => i.AddToMapping(hbmMapping));
+			imports.Clear();
+
+			return hbmMapping;
 		}
 
 		private IEnumerable<System.Type> Subclasses(IEnumerable<System.Type> types)
@@ -843,6 +866,10 @@ namespace NHibernate.Mapping.ByCode
 				{
 					MapComponent(member, memberPath, propertyType, propertiesContainer, propertiesContainerType);
 				}
+				else if (modelInspector.IsDynamicComponent(member))
+				{
+					MapDynamicComponent(member, memberPath, propertyType, propertiesContainer);
+				}
 				else
 				{
 					MapProperty(member, memberPath, propertiesContainer);
@@ -1005,7 +1032,7 @@ namespace NHibernate.Mapping.ByCode
 			}
 		}
 
-		private void MapDynamicComponent(MemberInfo member, PropertyPath memberPath, System.Type propertyType, IPropertyContainerMapper propertiesContainer)
+		private void MapDynamicComponent(MemberInfo member, PropertyPath memberPath, System.Type propertyType, IBasePlainPropertyContainerMapper propertiesContainer)
 		{
 			propertiesContainer.Component(member, (IDynamicComponentMapper componentMapper) =>
 			{
@@ -1130,9 +1157,12 @@ namespace NHibernate.Mapping.ByCode
 
 		protected MemberInfo GetComponentParentReferenceProperty(IEnumerable<MemberInfo> persistentProperties, System.Type propertiesContainerType)
 		{
-			return modelInspector.IsComponent(propertiesContainerType)
-			       	? persistentProperties.FirstOrDefault(pp => pp.GetPropertyOrFieldType() == propertiesContainerType)
-			       	: null;
+			// if container is component, then all properties referencing container are assumed parent reference
+			if (modelInspector.IsComponent(propertiesContainerType))
+				return persistentProperties.FirstOrDefault(pp => pp.GetPropertyOrFieldType() == propertiesContainerType);
+
+			// return the first non-many-to-one property
+			return persistentProperties.Where(pp => !modelInspector.IsManyToOne(pp)).FirstOrDefault(pp => pp.GetPropertyOrFieldType() == propertiesContainerType);
 		}
 
 		private void MapBag(MemberInfo member, PropertyPath propertyPath, System.Type propertyType, ICollectionPropertiesContainerMapper propertiesContainer,
@@ -1256,9 +1286,19 @@ namespace NHibernate.Mapping.ByCode
 			{
 				return new OneToManyRelationMapper(propertyPath, ownerType, collectionElementType, modelInspector, customizerHolder, this);
 			}
-			if (modelInspector.IsManyToMany(property))
+			//NH-3667 & NH-3102
+			//check if property is really a many-to-many: as detected by modelInspector.IsManyToMany and also the collection type is an entity
+			if (modelInspector.IsManyToMany(property) == true)
 			{
-				return new ManyToManyRelationMapper(propertyPath, customizerHolder, this);
+				if (property.GetPropertyOrFieldType().IsGenericCollection() == true)
+				{
+					var args = property.GetPropertyOrFieldType().GetGenericArguments();
+
+					if (modelInspector.IsEntity(args.Last()) == true)
+					{
+						return new ManyToManyRelationMapper(propertyPath, customizerHolder, this);
+					}
+				}
 			}
 			if (modelInspector.IsComponent(collectionElementType))
 			{

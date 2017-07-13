@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using Iesi.Collections.Generic;
 
 using NHibernate.Engine;
 using NHibernate.Intercept;
@@ -76,7 +75,7 @@ namespace NHibernate.Tuple.Entity
 		private readonly bool inherited;
 		private readonly bool hasSubclasses;
 
-		private readonly HashedSet<string> subclassEntityNames = new HashedSet<string>();
+		private readonly HashSet<string> subclassEntityNames = new HashSet<string>();
 		private readonly bool hasInsertGeneratedValues;
 		private readonly bool hasUpdateGeneratedValues;
 
@@ -256,7 +255,7 @@ namespace NHibernate.Tuple.Entity
 
 			if(hadLazyProperties && !hasLazy)
 			{
-				log.WarnFormat("Disabled lazy properies fetching for {0} beacuse it does not support lazy at the entity level", name);
+				log.WarnFormat("Disabled lazy property fetching for {0} because it does not support lazy at the entity level", name);
 			}
 			if (hasLazy)
 			{
@@ -265,7 +264,7 @@ namespace NHibernate.Tuple.Entity
 
 			if(hadNoProxyRelations && !hasUnwrapProxyForProperties)
 			{
-				log.WarnFormat("Disabled ghost properies fetching for {0} beacuse it does not support lazy at the entity level", name);
+				log.WarnFormat("Disabled ghost property fetching for {0} because it does not support lazy at the entity level", name);
 			}
 			if (hasUnwrapProxyForProperties)
 			{

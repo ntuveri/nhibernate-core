@@ -88,8 +88,9 @@ namespace NHibernate.Criterion
 					this,
 					value);
 
-			Parameter[] parameters = criteriaQuery.NewQueryParameter(GetParameterTypedValue(criteria, criteriaQuery)).ToArray();
-
+			TypedValue typedValue = GetParameterTypedValue(criteria, criteriaQuery);
+			Parameter[] parameters = criteriaQuery.NewQueryParameter(typedValue).ToArray();
+   
 			if (ignoreCase)
 			{
 				if (columnNames.Length != 1)
@@ -98,30 +99,43 @@ namespace NHibernate.Criterion
 						"case insensitive expression may only be applied to single-column properties: " +
 						propertyName);
 				}
-
-				return new SqlStringBuilder(6)
-					.Add(criteriaQuery.Factory.Dialect.LowercaseFunction)
-					.Add(StringHelper.OpenParen)
-					.Add(columnNames[0])
-					.Add(StringHelper.ClosedParen)
-					.Add(Op)
-					.Add(parameters.Single())
-					.ToSqlString();
+   
+				return new SqlString(
+					criteriaQuery.Factory.Dialect.LowercaseFunction,
+					StringHelper.OpenParen,
+					columnNames[0],
+					StringHelper.ClosedParen,
+					Op,
+					parameters.Single());
 			}
 			else
 			{
 				SqlStringBuilder sqlBuilder = new SqlStringBuilder(4 * columnNames.Length);
+				var columnNullness = typedValue.Type.ToColumnNullness(typedValue.Value, criteriaQuery.Factory);
 
+				if (columnNullness.Length != columnNames.Length)
+				{
+					throw new AssertionFailure("Column nullness length doesn't match number of columns.");
+				}
+   
 				for (int i = 0; i < columnNames.Length; i++)
 				{
 					if (i > 0)
 					{
 						sqlBuilder.Add(" and ");
 					}
-
-					sqlBuilder.Add(columnNames[i])
-						.Add(Op)
-						.Add(parameters[i]);
+   
+					if (columnNullness[i])
+					{
+						sqlBuilder.Add(columnNames[i])
+								  .Add(Op)
+								  .Add(parameters[i]);
+					}
+					else
+					{
+						sqlBuilder.Add(columnNames[i])
+								  .Add(" is null ");
+					}
 				}
 				return sqlBuilder.ToSqlString();
 			}
@@ -173,13 +187,25 @@ namespace NHibernate.Criterion
 			get { return op; }
 		}
 
-		string ValueToStrings()
+		private static readonly System.Type[] CallToStringTypes = new[]
 		{
-			if(value!=null && value.GetType().IsPrimitive)
+			typeof(DateTime),
+			typeof(string),
+		};
+
+		private string ValueToStrings()
+		{
+			if (value == null)
+			{
+				return "null";
+			}
+			var type = value.GetType();
+			if (type.IsPrimitive || CallToStringTypes.Any(t => t.IsAssignableFrom(type)))
 			{
 				return value.ToString();
 			}
-			return ObjectUtils.IdentityToString(value);
+
+			return ObjectHelpers.IdentityToString(value);
 		}
 	}
 }

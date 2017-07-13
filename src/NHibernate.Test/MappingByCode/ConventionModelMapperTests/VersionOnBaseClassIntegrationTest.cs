@@ -1,6 +1,5 @@
 using NHibernate.Mapping.ByCode;
 using NUnit.Framework;
-using SharpTestsEx;
 
 namespace NHibernate.Test.MappingByCode.ConventionModelMapperTests
 {
@@ -33,8 +32,8 @@ namespace NHibernate.Test.MappingByCode.ConventionModelMapperTests
 
 			var hbmClass = hbmMapping.RootClasses[0];
 			var hbmVersion = hbmClass.Version;
-			hbmVersion.Should().Not.Be.Null();
-			hbmVersion.name.Should().Be("Version");
+			Assert.That(hbmVersion, Is.Not.Null);
+			Assert.That(hbmVersion.name, Is.EqualTo("Version"));
 		}
 
 		[Test]
@@ -43,7 +42,7 @@ namespace NHibernate.Test.MappingByCode.ConventionModelMapperTests
 			var mapper = new ConventionModelMapper();
 			var baseEntityType = typeof(BaseEntity);
 			mapper.IsEntity((t, declared) => baseEntityType.IsAssignableFrom(t) && baseEntityType != t && !t.IsInterface);
-			mapper.IsRootEntity((t, declared) => baseEntityType.Equals(t.BaseType));
+			mapper.IsRootEntity((t, declared) => baseEntityType == t.BaseType);
 			mapper.Class<BaseEntity>(
 				map =>
 				{
@@ -54,10 +53,9 @@ namespace NHibernate.Test.MappingByCode.ConventionModelMapperTests
 
 			var hbmClass = hbmMapping.RootClasses[0];
 			var hbmVersion = hbmClass.Version;
-			hbmVersion.Should().Not.Be.Null();
-			hbmVersion.name.Should().Be("Version");
-
-			hbmClass.Properties.Should("because one is the POID and the other is the version").Be.Empty();
+			Assert.That(hbmVersion, Is.Not.Null);
+			Assert.That(hbmVersion.name, Is.EqualTo("Version"));
+			Assert.That(hbmClass.Properties, Is.Empty, "because one is the POID and the other is the version");
 		}
 	}
 }

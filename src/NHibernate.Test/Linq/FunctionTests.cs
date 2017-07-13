@@ -13,14 +13,43 @@ namespace NHibernate.Test.Linq
 	public class FunctionTests : LinqTestCase
 	{
 		[Test]
-		public void SubstringFunction2()
+		public void LikeFunction()
 		{
-			if (Dialect is FirebirdDialect)
-				Assert.Ignore("Firebird before 2.0 only support integer literals for substring() - NH generates parameters.");
+			var query = (from e in db.Employees
+						 where NHibernate.Linq.SqlMethods.Like(e.FirstName, "Ma%et")
+						 select e).ToList();
+
+			Assert.That(query.Count, Is.EqualTo(1));
+			Assert.That(query[0].FirstName, Is.EqualTo("Margaret"));
+		}
+
+		private static class SqlMethods
+		{
+			public static bool Like(string expression, string pattern)
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		[Test]
+		public void LikeFunctionUserDefined()
+		{
+			// Verify that any method named Like, in a class named SqlMethods, will be translated.
 
 			var query = (from e in db.Employees
-						 where e.FirstName.Substring(0, 2) == "An"
+						 where NHibernate.Test.Linq.FunctionTests.SqlMethods.Like(e.FirstName, "Ma%et")
 						 select e).ToList();
+
+			Assert.That(query.Count, Is.EqualTo(1));
+			Assert.That(query[0].FirstName, Is.EqualTo("Margaret"));
+		}
+
+		[Test]
+		public void SubstringFunction2()
+		{
+			var query = (from e in db.Employees
+				where e.FirstName.Substring(0, 2) == "An"
+				select e).ToList();
 
 			Assert.That(query.Count, Is.EqualTo(2));
 		}
@@ -28,12 +57,9 @@ namespace NHibernate.Test.Linq
 		[Test]
 		public void SubstringFunction1()
 		{
-			if (Dialect is FirebirdDialect)
-				Assert.Ignore("Firebird before 2.0 only support integer literals for substring() - NH generates parameters.");
-
 			var query = (from e in db.Employees
-						 where e.FirstName.Substring(3) == "rew"
-						 select e).ToList();
+				where e.FirstName.Substring(3) == "rew"
+				select e).ToList();
 
 			Assert.That(query.Count, Is.EqualTo(1));
 			Assert.That(query[0].FirstName, Is.EqualTo("Andrew"));
@@ -60,8 +86,8 @@ namespace NHibernate.Test.Linq
 								{
 									Before = e.FirstName,
 									AfterMethod = e.FirstName.Replace("An", "Zan"),
-                                    AfterExtension = ExtensionMethods.Replace(e.FirstName, "An", "Zan"),
-                                    AfterExtension2 = e.FirstName.ReplaceExtension("An", "Zan")
+									AfterExtension = ExtensionMethods.Replace(e.FirstName, "An", "Zan"),
+									AfterExtension2 = e.FirstName.ReplaceExtension("An", "Zan")
 								};
 
 			var s = ObjectDumper.Write(query);
@@ -74,7 +100,7 @@ namespace NHibernate.Test.Linq
 				Assert.Ignore("Locate function not supported.");
 
 			var query = from e in db.Employees
-                        where e.FirstName.IndexOf('A') == 1
+						where e.FirstName.IndexOf('A') == 1
 						select e.FirstName;
 
 			ObjectDumper.Write(query);
@@ -113,75 +139,67 @@ namespace NHibernate.Test.Linq
 				Assert.Ignore("Locate function not supported.");
 
 			var query = from e in db.Employees
-		                where e.FirstName.IndexOf("A") == e.BirthDate.Value.Month 
-		    			select e.FirstName;
+						where e.FirstName.IndexOf("A") == e.BirthDate.Value.Month 
+						select e.FirstName;
 
 			ObjectDumper.Write(query);
 		}
 
-        [Test]
-        public void ToStringFunction()
-        {
-            var query = from ol in db.OrderLines
-                        where ol.Quantity.ToString() == "4"
-                        select ol;
+		[Test]
+		public void ToStringFunction()
+		{
+			var query = from ol in db.OrderLines
+						where ol.Quantity.ToString() == "4"
+						select ol;
 
-            Assert.AreEqual(55, query.Count());
-        }
+			Assert.AreEqual(55, query.Count());
+		}
 
-        [Test]
-        public void ToStringWithContains()
-        {
-            var query = from ol in db.OrderLines
-                        where ol.Quantity.ToString().Contains("5")
-                        select ol;
+		[Test]
+		public void ToStringWithContains()
+		{
+			var query = from ol in db.OrderLines
+						where ol.Quantity.ToString().Contains("5")
+						select ol;
 
-            Assert.AreEqual(498, query.Count());
-        }
+			Assert.AreEqual(498, query.Count());
+		}
 
-        [Test]
-        public void Coalesce()
-        {
-            Assert.AreEqual(2, session.Query<AnotherEntity>().Where(e => (e.Input ?? "hello") == "hello").Count());
-        }
+		[Test]
+		public void Coalesce()
+		{
+			Assert.AreEqual(2, session.Query<AnotherEntity>().Where(e => (e.Input ?? "hello") == "hello").Count());
+		}
 
-        [Test]
-        public void Trim()
-        {
-            List<int> idsToDelete = new List<int>();
-            try
-            {
-                AnotherEntity ae1 = new AnotherEntity {Input = " hi "};
-                AnotherEntity ae2 = new AnotherEntity {Input = "hi"};
-                AnotherEntity ae3 = new AnotherEntity {Input = "heh"};
-                session.Save(ae1);
-                idsToDelete.Add(ae1.Id);
-                session.Save(ae2);
-                idsToDelete.Add(ae2.Id);
-                session.Save(ae3);
-                idsToDelete.Add(ae3.Id);
-                session.Flush();
+		[Test]
+		public void Trim()
+		{
+			using (session.BeginTransaction())
+			{
+				AnotherEntity ae1 = new AnotherEntity {Input = " hi "};
+				AnotherEntity ae2 = new AnotherEntity {Input = "hi"};
+				AnotherEntity ae3 = new AnotherEntity {Input = "heh"};
+				session.Save(ae1);
+				session.Save(ae2);
+				session.Save(ae3);
+				session.Flush();
 
-                Assert.AreEqual(2, session.Query<AnotherEntity>().Where(e => e.Input.Trim() == "hi").Count());
-                Assert.AreEqual(1, session.Query<AnotherEntity>().Where(e => e.Input.TrimEnd() == " hi").Count());
+				Assert.AreEqual(2, session.Query<AnotherEntity>().Where(e => e.Input.Trim() == "hi").Count());
+				Assert.AreEqual(1, session.Query<AnotherEntity>().Where(e => e.Input.TrimEnd() == " hi").Count());
 
-                // Emulated trim does not support multiple trim characters, but for many databases it should work fine anyways.
-                Assert.AreEqual(1, session.Query<AnotherEntity>().Where(e => e.Input.Trim('h') == "e").Count());
-                Assert.AreEqual(1, session.Query<AnotherEntity>().Where(e => e.Input.TrimStart('h') == "eh").Count());
-                Assert.AreEqual(1, session.Query<AnotherEntity>().Where(e => e.Input.TrimEnd('h') == "he").Count());
-            }
-            finally
-            {
-                foreach (int idToDelete in idsToDelete)
-                    session.Delete(session.Get<AnotherEntity>(idToDelete));
-                session.Flush();
-            }
-        }
+				// Emulated trim does not support multiple trim characters, but for many databases it should work fine anyways.
+				Assert.AreEqual(1, session.Query<AnotherEntity>().Where(e => e.Input.Trim('h') == "e").Count());
+				Assert.AreEqual(1, session.Query<AnotherEntity>().Where(e => e.Input.TrimStart('h') == "eh").Count());
+				Assert.AreEqual(1, session.Query<AnotherEntity>().Where(e => e.Input.TrimEnd('h') == "he").Count());
 
-		[Test, Ignore()]
+				// Let it rollback to get rid of temporary changes.
+			}
+		}
+
+		[Test, Ignore]
 		public void TrimTrailingWhitespace()
 		{
-			try
+			using (session.BeginTransaction())
 			{
 				session.Save(new AnotherEntity {Input = " hi "});
 				session.Save(new AnotherEntity {Input = "hi"});
@@ -189,11 +207,8 @@ namespace NHibernate.Test.Linq
 				session.Flush();
 
 				Assert.AreEqual(TestDialect.IgnoresTrailingWhitespace ? 2 : 1, session.Query<AnotherEntity>().Where(e => e.Input.TrimStart() == "hi ").Count());
-			}
-			finally
-			{
-				session.Delete("from AnotherEntity e where e.Id > 5");
-				session.Flush();
+
+				// Let it rollback to get rid of temporary changes.
 			}
 		}
 
@@ -202,6 +217,15 @@ namespace NHibernate.Test.Linq
 		{
 			var query = (from item in db.Users
 						 where item.Name.Equals("ayende")
+						 select item).ToList();
+			ObjectDumper.Write(query);
+		}
+
+		[Test, Description("NH-3367")]
+		public void WhereStaticStringEqual()
+		{
+			var query = (from item in db.Users
+						 where string.Equals(item.Name, "ayende")
 						 select item).ToList();
 			ObjectDumper.Write(query);
 		}
@@ -230,8 +254,8 @@ namespace NHibernate.Test.Linq
 		public void WhereBoolConstantEqual()
 		{
 			var query = from item in db.Role
-			            where item.IsActive.Equals(true)
-			            select item;
+						where item.IsActive.Equals(true)
+						select item;
 			
 			ObjectDumper.Write(query);
 		}
@@ -241,7 +265,7 @@ namespace NHibernate.Test.Linq
 		{
 			var query = from item in db.Role
 						where item.IsActive.Equals(1 == 1)
-			            select item;
+						select item;
 			
 			ObjectDumper.Write(query);
 		}
@@ -316,8 +340,18 @@ namespace NHibernate.Test.Linq
 						select item;
 
 			ObjectDumper.Write(query);
-		}	
-	
+		}
+
+		[Test]
+		public void WhereByteEqual()
+		{
+			var query = from item in session.Query<Foo>()
+						where item.Byte.Equals(1)
+						select item;
+
+			ObjectDumper.Write(query);
+		}
+
 		[Test]
 		public void WhereDecimalEqual()
 		{

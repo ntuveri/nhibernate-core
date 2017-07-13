@@ -103,14 +103,7 @@ namespace NHibernate.Loader.Custom.Sql
 		private IDictionary<string, string[]> InternalGetPropertyResultsMap(string alias)
 		{
 			NativeSQLQueryNonScalarReturn rtn = alias2Return[alias] as NativeSQLQueryNonScalarReturn;
-			if (rtn != null)
-			{
-				return rtn.PropertyResultsMap;
-			}
-			else
-			{
-				return null;
-			}
+			return rtn != null ? rtn.PropertyResultsMap : null;
 		}
 
 		private bool HasPropertyResultMap(string alias)
@@ -125,13 +118,13 @@ namespace NHibernate.Loader.Custom.Sql
 			// so that role returns can be more easily resolved to their owners
 			for (int i = 0; i < queryReturns.Length; i++)
 			{
-				if (queryReturns[i] is NativeSQLQueryNonScalarReturn)
+				var rtn = queryReturns[i] as NativeSQLQueryNonScalarReturn;
+				if (rtn != null)
 				{
-					NativeSQLQueryNonScalarReturn rtn = (NativeSQLQueryNonScalarReturn) queryReturns[i];
 					alias2Return[rtn.Alias] = rtn;
-					if (rtn is NativeSQLQueryJoinReturn)
+					var roleReturn = queryReturns[i] as NativeSQLQueryJoinReturn;
+					if (roleReturn != null)
 					{
-						NativeSQLQueryJoinReturn roleReturn = (NativeSQLQueryJoinReturn) queryReturns[i];
 						alias2OwnerAlias[roleReturn.Alias] = roleReturn.OwnerAlias;
 					}
 				}
@@ -265,7 +258,7 @@ namespace NHibernate.Loader.Custom.Sql
 			// Make sure the owner alias is known...
 			if (!alias2Return.ContainsKey(ownerAlias))
 			{
-				throw new HibernateException("Owner alias [" + ownerAlias + "] is unknown for alias [" + alias + "]");
+				throw new HibernateException(string.Format("Owner alias [{0}] is unknown for alias [{1}]", ownerAlias, alias));
 			}
 
 			// If this return's alias has not been processed yet, do so b4 further processing of this return
@@ -293,7 +286,7 @@ namespace NHibernate.Loader.Custom.Sql
 
 		public IList GenerateCustomReturns(bool queryHadAliases)
 		{
-			IList customReturns = new ArrayList();
+			IList customReturns = new List<object>();
 			IDictionary<string, object> customReturnsByAlias = new Dictionary<string, object>();
 			for (int i = 0; i < queryReturns.Length; i++)
 			{
@@ -333,7 +326,7 @@ namespace NHibernate.Loader.Custom.Sql
 					{
 						collectionAliases =
 							new GeneratedCollectionAliases(collectionPropertyResultMaps[alias], alias2CollectionPersister[alias],
-							                               alias2CollectionSuffix[alias]);
+														   alias2CollectionSuffix[alias]);
 						if (isEntityElements)
 						{
 							elementEntityAliases =
@@ -352,7 +345,7 @@ namespace NHibernate.Loader.Custom.Sql
 					}
 					CollectionReturn customReturn =
 						new CollectionReturn(alias, rtn.OwnerEntityName, rtn.OwnerProperty, collectionAliases, elementEntityAliases,
-						                     rtn.LockMode);
+											 rtn.LockMode);
 					customReturns.Add(customReturn);
 					customReturnsByAlias[rtn.Alias] = customReturn;
 				}
@@ -362,9 +355,9 @@ namespace NHibernate.Loader.Custom.Sql
 					string alias = rtn.Alias;
 					FetchReturn customReturn;
 					NonScalarReturn ownerCustomReturn = (NonScalarReturn) customReturnsByAlias[rtn.OwnerAlias];
-					if (alias2CollectionPersister.ContainsKey(alias))
+					ISqlLoadableCollection persister;
+					if (alias2CollectionPersister.TryGetValue(alias, out persister))
 					{
-						ISqlLoadableCollection persister = alias2CollectionPersister[alias];
 						bool isEntityElements = persister.ElementType.IsEntityType;
 						ICollectionAliases collectionAliases;
 						IEntityAliases elementEntityAliases = null;
@@ -389,9 +382,9 @@ namespace NHibernate.Loader.Custom.Sql
 						}
 						customReturn =
 							new CollectionFetchReturn(alias, ownerCustomReturn, rtn.OwnerProperty, collectionAliases, elementEntityAliases,
-							                          rtn.LockMode);
+													  rtn.LockMode);
 					}
-					else
+					else 
 					{
 						IEntityAliases entityAliases;
 						if (queryHadAliases || HasPropertyResultMap(alias))

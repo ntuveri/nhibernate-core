@@ -19,13 +19,13 @@ namespace NHibernate
 		/// <summary>
 		/// Set the maximum number of rows to retrieve.
 		/// </summary>
-		/// <param name="maxResults">The maximum number of rows to retreive.</param>
+		/// <param name="maxResults">The maximum number of rows to retrieve.</param>
 		IDetachedQuery SetMaxResults(int maxResults);
 
 		/// <summary>
 		/// Sets the first row to retrieve.
 		/// </summary>
-		/// <param name="firstResult">The first row to retreive.</param>
+		/// <param name="firstResult">The first row to retrieve.</param>
 		IDetachedQuery SetFirstResult(int firstResult);
 
 		/// <summary>
@@ -58,7 +58,7 @@ namespace NHibernate
 		IDetachedQuery SetFetchSize(int fetchSize);
 
 		/// <summary>
-		/// Set the lockmode for the objects idententified by the
+		/// Set the lockmode for the objects identified by the
 		/// given alias that appears in the <c>FROM</c> clause.
 		/// </summary>
 		/// <param name="alias">alias a query alias, or <c>this</c> for a collection filter</param>
@@ -108,7 +108,7 @@ namespace NHibernate
 		/// <param name="name">The name of the parameter</param>
 		/// <param name="vals">A collection of values to list</param>
 		/// <param name="type">The Hibernate type of the values</param>
-		IDetachedQuery SetParameterList(string name, ICollection vals, IType type);
+		IDetachedQuery SetParameterList(string name, IEnumerable vals, IType type);
 
 		/// <summary>
 		/// Bind multiple values to a named query parameter, guessing the Hibernate
@@ -117,7 +117,7 @@ namespace NHibernate
 		/// </summary>
 		/// <param name="name">The name of the parameter</param>
 		/// <param name="vals">A collection of values to list</param>
-		IDetachedQuery SetParameterList(string name, ICollection vals);
+		IDetachedQuery SetParameterList(string name, IEnumerable vals);
 
 		/// <summary>
 		/// Bind the property values of the given object to named parameters of the query,

@@ -1,7 +1,6 @@
 using System;
 using NHibernate.Mapping.ByCode;
 using NUnit.Framework;
-using SharpTestsEx;
 
 namespace NHibernate.Test.MappingByCode.MixAutomapping
 {
@@ -41,7 +40,7 @@ namespace NHibernate.Test.MappingByCode.MixAutomapping
 			System.Type baseEntityType = typeof(Entity);
 			var inspector = new SimpleModelInspector();
 			inspector.IsEntity((t, declared) => baseEntityType.IsAssignableFrom(t) && baseEntityType != t && !t.IsInterface);
-			inspector.IsRootEntity((t, declared) => baseEntityType.Equals(t.BaseType));
+			inspector.IsRootEntity((t, declared) => baseEntityType == t.BaseType);
 
 			var mapper = new ModelMapper(inspector);
 			mapper.Class<Entity>(map => map.Id(x => x.Id,
@@ -62,7 +61,7 @@ namespace NHibernate.Test.MappingByCode.MixAutomapping
 			});
 			mapper.Subclass<FormActivity>(map => map.DiscriminatorValue(1));
 
-			mapper.Executing(m=> m.CompileMappingFor(new[] { typeof(Activity), typeof(FormActivity) })).NotThrows();
+			Assert.That(() => mapper.CompileMappingFor(new[] { typeof(Activity), typeof(FormActivity) }), Throws.Nothing);
 		}
 	}
 }

@@ -1,10 +1,8 @@
 using System.Collections.Generic;
 using System.Text;
-using Iesi.Collections.Generic;
 using NHibernate.Dialect;
 using NHibernate.Mapping;
 using NUnit.Framework;
-using SharpTestsEx;
 
 namespace NHibernate.Test.NHSpecificTest.NH2530
 {
@@ -26,12 +24,19 @@ namespace NHibernate.Test.NHSpecificTest.NH2530
 			{
 				script.AppendLine(string.Format("INSERT INTO [NextHighVaues] (Entity, NextHigh) VALUES ('{0}',1);", entity.Name));
 			}
-			return new SimpleAuxiliaryDatabaseObject(script.ToString(), null, new HashedSet<string> { typeof(MsSql2000Dialect).FullName, typeof(MsSql2005Dialect).FullName, typeof(MsSql2008Dialect).FullName });
+			var dialects = new HashSet<string>
+							   {
+								   typeof (MsSql2000Dialect).FullName,
+								   typeof (MsSql2005Dialect).FullName,
+								   typeof (MsSql2008Dialect).FullName,
+								   typeof (MsSql2012Dialect).FullName
+							   };
+			return new SimpleAuxiliaryDatabaseObject(script.ToString(), null, dialects);
 		}
 
 		protected override bool AppliesTo(Dialect.Dialect dialect)
 		{
-			return (dialect is Dialect.MsSql2000Dialect);
+			return (dialect is MsSql2000Dialect);
 		}
 
 		[Test]
@@ -41,7 +46,7 @@ namespace NHibernate.Test.NHSpecificTest.NH2530
 			using (var tx = session.BeginTransaction())
 			{
 				var customer = new Customer { Name = "Mengano" };
-				session.Executing(s => s.Persist(customer)).Throws().And.ValueOf.Message.Should().Contain("Entity = 'Customer'");
+				Assert.That(() => session.Persist(customer), Throws.Exception.Message.ContainsSubstring("Entity = 'Customer'"));
 			}
 		}
 	}

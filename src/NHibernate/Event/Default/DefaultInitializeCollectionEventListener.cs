@@ -35,7 +35,7 @@ namespace NHibernate.Event.Default
 			{
 				if (log.IsDebugEnabled)
 				{
-					log.Debug("initializing collection " + MessageHelper.InfoString(ce.LoadedPersister, ce.LoadedKey, source.Factory));
+					log.Debug("initializing collection " + MessageHelper.CollectionInfoString(ce.LoadedPersister, collection, ce.LoadedKey, source));
 				}
 
 				log.Debug("checking second-level cache");
@@ -80,7 +80,7 @@ namespace NHibernate.Event.Default
 			{
 				ISessionFactoryImplementor factory = source.Factory;
 
-				CacheKey ck = new CacheKey(id, persister.KeyType, persister.Role, source.EntityMode, factory);
+				CacheKey ck = source.GenerateCacheKey(id, persister.KeyType, persister.Role);
 				object ce = persister.Cache.Get(ck, source.Timestamp);
 
 				if (factory.Statistics.IsStatisticsEnabled)

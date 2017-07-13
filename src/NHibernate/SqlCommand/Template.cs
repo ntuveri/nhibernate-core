@@ -1,19 +1,18 @@
 using System;
 using System.Collections;
 using System.Text;
-using Iesi.Collections;
 using NHibernate.Dialect.Function;
-using NHibernate.Hql.Classic;
+using NHibernate.Hql;
 using NHibernate.Util;
 using System.Collections.Generic;
 
 namespace NHibernate.SqlCommand
 {
-	public sealed class Template
+	public static class Template
 	{
-		private static readonly ISet Keywords = new HashedSet();
-		private static readonly ISet BeforeTableKeywords = new HashedSet();
-		private static readonly ISet FunctionKeywords = new HashedSet();
+		private static readonly HashSet<string> Keywords = new HashSet<string>();
+		private static readonly HashSet<string> BeforeTableKeywords = new HashSet<string>();
+		private static readonly HashSet<string> FunctionKeywords = new HashSet<string>();
 
 		static Template()
 		{
@@ -62,10 +61,6 @@ namespace NHibernate.SqlCommand
 		}
 
 		public static readonly string Placeholder = "$PlaceHolder$";
-
-		private Template()
-		{
-		}
 
 		public static string RenderWhereStringTemplate(string sqlWhereString, Dialect.Dialect dialect,
 		                                               SQLFunctionRegistry functionRegistry)

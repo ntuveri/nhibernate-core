@@ -1,5 +1,5 @@
 using System.Collections;
-using Iesi.Collections.Generic;
+using System.Collections.Generic;
 
 using NHibernate.Engine;
 using NHibernate.Id;
@@ -275,7 +275,7 @@ namespace NHibernate.Tuple.Entity
 
 			for (int j = 0; j < entityMetamodel.PropertySpan; j++)
 			{
-				if (setAll || values[j] != LazyPropertyInitializer.UnfetchedProperty)
+				if (setAll || !Equals(LazyPropertyInitializer.UnfetchedProperty, values[j]))
 				{
 					setters[j].Set(entity, values[j]);
 				}

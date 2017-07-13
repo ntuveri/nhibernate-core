@@ -82,7 +82,7 @@ namespace NHibernate.Criterion
 				sb.Add(StringHelper.OpenParen);
 			}
 			bool first = true;
-			foreach (SqlString sqlString in StringHelper.Add(columnNames, Op, otherColumnNames))
+			foreach (SqlString sqlString in SqlStringHelper.Add(columnNames, Op, otherColumnNames))
 			{
 				if (first == false)
 				{
@@ -124,7 +124,7 @@ namespace NHibernate.Criterion
 		/// <summary></summary>
 		public override string ToString()
 		{
-			return (_lhsProjection ?? (object)_lhsPropertyName) + Op + _rhsPropertyName;
+			return (_lhsProjection ?? (object)_lhsPropertyName) + Op + (_rhsProjection ?? (object)_rhsPropertyName);
 		}
 
 		public override IProjection[] GetProjections()

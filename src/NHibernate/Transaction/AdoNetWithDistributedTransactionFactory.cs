@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Transactions;
-
 using NHibernate.Engine;
 using NHibernate.Engine.Transaction;
 using NHibernate.Impl;
@@ -37,45 +36,52 @@ namespace NHibernate.Transaction
 			logger.DebugFormat("enlisted into DTC transaction: {0}",
 							   transactionContext.AmbientTransation.IsolationLevel);
 			session.AfterTransactionBegin(null);
-			transactionContext.AmbientTransation.TransactionCompleted +=
-				delegate(object sender, TransactionEventArgs e)
+
+			TransactionCompletedEventHandler handler = null;
+
+			handler = delegate(object sender, TransactionEventArgs e)
+				{
+					using (new SessionIdLoggingContext(session.SessionId))
 					{
-						using (new SessionIdLoggingContext(session.SessionId))
+						((DistributedTransactionContext) session.TransactionContext).IsInActiveTransaction = false;
+
+						bool wasSuccessful = false;
+						try
 						{
-							((DistributedTransactionContext)session.TransactionContext).IsInActiveTransaction = false;
-							
-							bool wasSuccessful = false;
-							try
-							{
-								wasSuccessful = e.Transaction.TransactionInformation.Status
-												== TransactionStatus.Committed;
-							}
-							catch (ObjectDisposedException ode)
-							{
-								logger.Warn("Completed transaction was disposed, assuming transaction rollback", ode);
-							}
-							session.AfterTransactionCompletion(wasSuccessful, null);
-							if (transactionContext.ShouldCloseSessionOnDistributedTransactionCompleted)
-							{
-								session.CloseSessionFromDistributedTransaction();
-							}
-							session.TransactionContext = null;
+							wasSuccessful = e.Transaction.TransactionInformation.Status
+											== TransactionStatus.Committed;
 						}
-					};
+						catch (ObjectDisposedException ode)
+						{
+							logger.Warn("Completed transaction was disposed, assuming transaction rollback", ode);
+						}
+						session.AfterTransactionCompletion(wasSuccessful, null);
+						if (transactionContext.ShouldCloseSessionOnDistributedTransactionCompleted)
+						{
+							session.CloseSessionFromDistributedTransaction();
+						}
+						session.TransactionContext = null;
+					}
+
+					e.Transaction.TransactionCompleted -= handler;
+				};
+
+			transactionContext.AmbientTransation.TransactionCompleted += handler;
+
 			transactionContext.AmbientTransation.EnlistVolatile(transactionContext,
 																EnlistmentOptions.EnlistDuringPrepareRequired);
 		}
 
 		public bool IsInDistributedActiveTransaction(ISessionImplementor session)
 		{
-			var distributedTransactionContext = ((DistributedTransactionContext) session.TransactionContext);
+			var distributedTransactionContext = ((DistributedTransactionContext)session.TransactionContext);
 			return distributedTransactionContext != null &&
 				   distributedTransactionContext.IsInActiveTransaction;
 		}
 
 		public void ExecuteWorkInIsolation(ISessionImplementor session, IIsolatedWork work, bool transacted)
 		{
-			using(var tx = new TransactionScope(TransactionScopeOption.Suppress))
+			using (var tx = new TransactionScope(TransactionScopeOption.Suppress))
 			{
 				// instead of duplicating the logic, we suppress the DTC transaction and create
 				// our own transaction instead
@@ -125,7 +131,7 @@ namespace NHibernate.Transaction
 					}
 					catch (Exception exception)
 					{
-						logger.Error("DTC transaction prepre phase failed", exception);
+						logger.Error("DTC transaction prepare phase failed", exception);
 						preparingEnlistment.ForceRollback(exception);
 					}
 				}
@@ -147,8 +153,9 @@ namespace NHibernate.Transaction
 			{
 				using (new SessionIdLoggingContext(sessionImplementor.SessionId))
 				{
-					sessionImplementor.AfterTransactionCompletion(false, null);
 					logger.Debug("rolled back DTC transaction");
+					// Currently AfterTransactionCompletion is called by the handler for the TransactionCompleted event.
+					//sessionImplementor.AfterTransactionCompletion(false, null);
 					enlistment.Done();
 					IsInActiveTransaction = false;
 				}

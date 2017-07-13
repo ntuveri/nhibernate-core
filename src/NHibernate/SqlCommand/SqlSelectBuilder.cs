@@ -18,7 +18,7 @@ namespace NHibernate.SqlCommand
 		private SqlString whereClause;
 		private SqlString outerJoinsAfterWhere;
 		private SqlString orderByClause;
-		private string groupByClause;
+		private SqlString groupByClause;
 		private SqlString havingClause;
 		private LockMode lockMode;
 		private string comment;
@@ -83,7 +83,7 @@ namespace NHibernate.SqlCommand
 		/// </summary>
 		/// <param name="groupByClause">The groupByClause to set</param>
 		/// <returns>The SqlSelectBuilder</returns>
-		public SqlSelectBuilder SetGroupByClause(string groupByClause)
+		public SqlSelectBuilder SetGroupByClause(SqlString groupByClause)
 		{
 			this.groupByClause = groupByClause;
 			return this;
@@ -222,44 +222,44 @@ namespace NHibernate.SqlCommand
 				.Add(" FROM ")
 				.Add(fromClause);
 
-			if (StringHelper.IsNotEmpty(outerJoinsAfterFrom))
+			if (SqlStringHelper.IsNotEmpty(outerJoinsAfterFrom))
 			{
 				sqlBuilder.Add(outerJoinsAfterFrom);
 			}
 
-			if (StringHelper.IsNotEmpty(whereClause) || StringHelper.IsNotEmpty(outerJoinsAfterWhere))
+			if (SqlStringHelper.IsNotEmpty(whereClause) || SqlStringHelper.IsNotEmpty(outerJoinsAfterWhere))
 			{
 				sqlBuilder.Add(" WHERE ");
 				// the outerJoinsAfterWhere needs to come before where clause to properly
 				// handle dynamic filters
-				if (StringHelper.IsNotEmpty(outerJoinsAfterWhere))
+				if (SqlStringHelper.IsNotEmpty(outerJoinsAfterWhere))
 				{
 					sqlBuilder.Add(outerJoinsAfterWhere);
-					if (StringHelper.IsNotEmpty(whereClause))
+					if (SqlStringHelper.IsNotEmpty(whereClause))
 					{
 						sqlBuilder.Add(" AND ");
 					}
 				}
 
-				if (StringHelper.IsNotEmpty(whereClause))
+				if (SqlStringHelper.IsNotEmpty(whereClause))
 				{
 					sqlBuilder.Add(whereClause);
 				}
 			}
 
-			if (StringHelper.IsNotEmpty(groupByClause))
+			if (SqlStringHelper.IsNotEmpty(groupByClause))
 			{
 				sqlBuilder.Add(" GROUP BY ")
 					.Add(groupByClause);
 			}
 
-			if(StringHelper.IsNotEmpty(havingClause))
+			if(SqlStringHelper.IsNotEmpty(havingClause))
 			{
 				sqlBuilder.Add(" HAVING ")
 					.Add(havingClause);
 			}
 
-			if (StringHelper.IsNotEmpty(orderByClause))
+			if (SqlStringHelper.IsNotEmpty(orderByClause))
 			{
 				sqlBuilder.Add(" ORDER BY ")
 					.Add(orderByClause);

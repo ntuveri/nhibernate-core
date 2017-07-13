@@ -10,6 +10,7 @@ using NHibernate.Proxy;
 using NHibernate.SqlTypes;
 using NHibernate.Util;
 using System.Collections.Generic;
+using NHibernate.Impl;
 
 namespace NHibernate.Type
 {
@@ -20,6 +21,8 @@ namespace NHibernate.Type
 	[Serializable]
 	public abstract class CollectionType : AbstractType, IAssociationType
 	{
+		private static readonly IInternalLogger log = LoggerProvider.LoggerFor(typeof(CollectionType));
+
 		private static readonly object NotNullCollection = new object(); // place holder
 		public static readonly object UnfetchedCollection = new object(); // place holder
 
@@ -272,6 +275,11 @@ namespace NHibernate.Type
 						session.PersistenceContext.AddCollectionHolder(collection);
 					}
 				}
+
+				if (log.IsDebugEnabled)
+				{
+					log.Debug("Created collection wrapper: " + MessageHelper.CollectionInfoString(persister, collection, key, session));
+				}
 			}
 			collection.Owner = owner;
 			return collection.GetValue();
@@ -329,7 +337,7 @@ namespace NHibernate.Type
 		}
 
 		public override object Replace(object original, object target, ISessionImplementor session, object owner,
-		                               IDictionary copyCache)
+									   IDictionary copyCache)
 		{
 			if (original == null)
 			{
@@ -342,8 +350,8 @@ namespace NHibernate.Type
 			}
 
 			object result = target == null || target == original
-			                	? InstantiateResult(original)
-			                	: target;
+								? InstantiateResult(original)
+								: target;
 
 			//for arrays, replaceElements() may return a different reference, since
 			//the array length might not match
@@ -362,7 +370,7 @@ namespace NHibernate.Type
 		}
 
 		public virtual object ReplaceElements(object original, object target, object owner, IDictionary copyCache,
-		                                      ISessionImplementor session)
+											  ISessionImplementor session)
 		{
 			// TODO: does not work for EntityMode.DOM4J yet!
 			object result = target;
@@ -453,14 +461,13 @@ namespace NHibernate.Type
 		}
 
 		public override bool IsModified(object oldHydratedState, object currentState, bool[] checkable,
-		                                ISessionImplementor session)
+										ISessionImplementor session)
 		{
 			return false;
 		}
 
 		/// <summary>
-		/// Get the key value from the owning entity instance, usually the identifier, but might be some
-		/// other unique key, in the case of property-ref
+		/// Get the key value from the owning entity instance.
 		/// </summary>
 		public object GetKeyOfOwner(object owner, ISessionImplementor session)
 		{
@@ -469,36 +476,7 @@ namespace NHibernate.Type
 				return null; // This just handles a particular case of component
 			// projection, perhaps get rid of it and throw an exception
 
-			if (foreignKeyPropertyName == null)
-			{
-				return entityEntry.Id;
-			}
-			else
-			{
-				// TODO: at the point where we are resolving collection references, we don't
-				// know if the uk value has been resolved (depends if it was earlier or
-				// later in the mapping document) - now, we could try and use e.getStatus()
-				// to decide to semiResolve(), trouble is that initializeEntity() reuses
-				// the same array for resolved and hydrated values
-				object id;
-				if (entityEntry.LoadedState != null)
-				{
-					id = entityEntry.GetLoadedValue(foreignKeyPropertyName);
-				}
-				else
-				{
-					id = entityEntry.Persister.GetPropertyValue(owner, foreignKeyPropertyName, session.EntityMode);
-				}
-
-				// NOTE VERY HACKISH WORKAROUND!!
-				IType keyType = GetPersister(session).KeyType;
-				if (!keyType.ReturnedClass.IsInstanceOfType(id))
-				{
-					id = keyType.SemiResolve(entityEntry.GetLoadedValue(foreignKeyPropertyName), session, owner);
-				}
-
-				return id;
-			}
+			return entityEntry.Id;
 		}
 
 		/// <summary> 
@@ -586,9 +564,9 @@ namespace NHibernate.Type
 				
 				if (element.IsProxy())
 				{
-                    INHibernateProxy proxy = element as INHibernateProxy; 
-                    
-                    ILazyInitializer li = proxy.HibernateLazyInitializer;
+					INHibernateProxy proxy = element as INHibernateProxy; 
+					
+					ILazyInitializer li = proxy.HibernateLazyInitializer;
 					if (!li.IsUninitialized)
 						element = li.GetImplementation();
 				}
@@ -637,7 +615,7 @@ namespace NHibernate.Type
 
 		protected internal virtual string RenderLoggableString(object value, ISessionFactoryImplementor factory)
 		{
-			IList list = new ArrayList();
+			IList list = new List<object>();
 			IType elemType = GetElementType(factory);
 			IEnumerable iter = GetElementsIterator(value);
 			foreach (object o in iter)

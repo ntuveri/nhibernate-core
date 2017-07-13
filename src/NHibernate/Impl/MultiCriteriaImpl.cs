@@ -2,8 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using Iesi.Collections;
-using Iesi.Collections.Generic;
 using NHibernate.Cache;
 using NHibernate.Criterion;
 using NHibernate.Driver;
@@ -95,15 +93,15 @@ namespace NHibernate.Impl
 		{
 			IQueryCache queryCache = session.Factory.GetQueryCache(cacheRegion);
 
-			ISet filterKeys = FilterKey.CreateFilterKeys(session.EnabledFilters, session.EntityMode);
+			ISet<FilterKey> filterKeys = FilterKey.CreateFilterKeys(session.EnabledFilters, session.EntityMode);
 
-			ISet<string> querySpaces = new HashedSet<string>();
+			ISet<string> querySpaces = new HashSet<string>();
 			List<IType[]> resultTypesList = new List<IType[]>();
 			int[] maxRows = new int[loaders.Count];
 			int[] firstRows = new int[loaders.Count];
 			for (int i = 0; i < loaders.Count; i++)
 			{
-				querySpaces.AddAll(loaders[i].QuerySpaces);
+				querySpaces.UnionWith(loaders[i].QuerySpaces);
 				resultTypesList.Add(loaders[i].ResultTypes);
 				firstRows[i] = parameters[i].RowSelection.FirstRow;
 				maxRows[i] = parameters[i].RowSelection.MaxRows;
@@ -111,7 +109,7 @@ namespace NHibernate.Impl
 
 			MultipleQueriesCacheAssembler assembler = new MultipleQueriesCacheAssembler(resultTypesList);
 			QueryParameters combinedParameters = CreateCombinedQueryParameters();
-			QueryKey key = new QueryKey(session.Factory, SqlString, combinedParameters, filterKeys)
+			QueryKey key = new QueryKey(session.Factory, SqlString, combinedParameters, filterKeys, null)
 				.SetFirstRows(firstRows)
 				.SetMaxRows(maxRows);
 
@@ -122,12 +120,31 @@ namespace NHibernate.Impl
 												  queryCache,
 												  key);
 
+			if (factory.Statistics.IsStatisticsEnabled)
+			{
+				if (result == null)
+				{
+					factory.StatisticsImplementor.QueryCacheMiss(key.ToString(), queryCache.RegionName);
+				}
+				else
+				{
+					factory.StatisticsImplementor.QueryCacheHit(key.ToString(), queryCache.RegionName);
+				}
+			}
+
 			if (result == null)
 			{
 				log.Debug("Cache miss for multi criteria query");
 				IList list = DoList();
-				queryCache.Put(key, new ICacheAssembler[] { assembler }, new object[] { list }, combinedParameters.NaturalKeyLookup, session);
 				result = list;
+				if ((session.CacheMode & CacheMode.Put) == CacheMode.Put)
+				{
+					bool put = queryCache.Put(key, new ICacheAssembler[] { assembler }, new object[] { list }, combinedParameters.NaturalKeyLookup, session);
+					if (put && factory.Statistics.IsStatisticsEnabled)
+					{
+						factory.StatisticsImplementor.QueryCachePut(key.ToString(), queryCache.RegionName);
+					}
+				}
 			}
 
 			return GetResultList(result);
@@ -140,12 +157,12 @@ namespace NHibernate.Impl
 
 		protected virtual IList GetResultList(IList results)
 		{
-			var resultCollections = new ArrayList(resultCollectionGenericType.Count);
+			var resultCollections = new List<object>(resultCollectionGenericType.Count);
 			for (int i = 0; i < criteriaQueries.Count; i++)
 			{
 				if (resultCollectionGenericType[i] == typeof(object))
 				{
-					resultCollections.Add(new ArrayList());
+					resultCollections.Add(new List<object>());
 				}
 				else
 				{
@@ -206,17 +223,17 @@ namespace NHibernate.Impl
 			{
 				using (var reader = resultSetsCommand.GetReader(null))
 				{
-					ArrayList[] hydratedObjects = new ArrayList[loaders.Count];
+					var hydratedObjects = new List<object>[loaders.Count];
 					List<EntityKey[]>[] subselectResultKeys = new List<EntityKey[]>[loaders.Count];
 					bool[] createSubselects = new bool[loaders.Count];
 					for (int i = 0; i < loaders.Count; i++)
 					{
 						CriteriaLoader loader = loaders[i];
 						int entitySpan = loader.EntityPersisters.Length;
-						hydratedObjects[i] = entitySpan == 0 ? null : new ArrayList(entitySpan);
+						hydratedObjects[i] = entitySpan == 0 ? null : new List<object>(entitySpan);
 						EntityKey[] keys = new EntityKey[entitySpan];
 						QueryParameters queryParameters = parameters[i];
-						IList tmpResults = new ArrayList();
+						IList tmpResults = new List<object>();
 
 						RowSelection selection = parameters[i].RowSelection;
 						createSubselects[i] = loader.IsSubselectLoadingEnabled;
@@ -249,7 +266,7 @@ namespace NHibernate.Impl
 					for (int i = 0; i < loaders.Count; i++)
 					{
 						CriteriaLoader loader = loaders[i];
-						loader.InitializeEntitiesAndCollections(hydratedObjects[i], reader, session, false);
+						loader.InitializeEntitiesAndCollections(hydratedObjects[i], reader, session, session.DefaultReadOnly);
 
 						if (createSubselects[i])
 						{
@@ -281,7 +298,7 @@ namespace NHibernate.Impl
 				string[] implementors = factory.GetImplementors(criteria.EntityOrClassName);
 				int size = implementors.Length;
 
-				ISet<string> spaces = new HashedSet<string>();
+				ISet<string> spaces = new HashSet<string>();
 
 				for (int i = 0; i < size; i++)
 				{
@@ -294,7 +311,7 @@ namespace NHibernate.Impl
 						);
 					loaders.Add(loader);
 					loaderCriteriaMap.Add(criteriaIndex);
-					spaces.AddAll(loader.QuerySpaces);
+					spaces.UnionWith(loader.QuerySpaces);
 				}
 				criteriaIndex += 1;
 			}
@@ -415,12 +432,11 @@ namespace NHibernate.Impl
 		{
 			if (criteriaResults == null) List();
 
-			if (!criteriaResultPositions.ContainsKey(key))
-			{
+			int criteriaResultPosition;
+			if (!criteriaResultPositions.TryGetValue(key, out criteriaResultPosition))
 				throw new InvalidOperationException(String.Format("The key '{0}' is unknown", key));
-			}
 
-			return criteriaResults[criteriaResultPositions[key]];
+			return criteriaResults[criteriaResultPosition];
 		}
 
 		#endregion
@@ -436,8 +452,8 @@ namespace NHibernate.Impl
 			QueryParameters combinedQueryParameters = new QueryParameters();
 			combinedQueryParameters.ForceCacheRefresh = forceCacheRefresh;
 			combinedQueryParameters.NamedParameters = new Dictionary<string, TypedValue>();
-			ArrayList positionalParameterTypes = new ArrayList();
-			ArrayList positionalParameterValues = new ArrayList();
+			var positionalParameterTypes = new List<IType>();
+			var positionalParameterValues = new List<object>();
 			int index = 0;
 			foreach (QueryParameters queryParameters in parameters)
 			{
@@ -449,17 +465,15 @@ namespace NHibernate.Impl
 				positionalParameterTypes.AddRange(queryParameters.PositionalParameterTypes);
 				positionalParameterValues.AddRange(queryParameters.PositionalParameterValues);
 			}
-			combinedQueryParameters.PositionalParameterTypes = (IType[])positionalParameterTypes.ToArray(typeof(IType));
-			combinedQueryParameters.PositionalParameterValues = (object[])positionalParameterValues.ToArray(typeof(object));
+			combinedQueryParameters.PositionalParameterTypes = positionalParameterTypes.ToArray();
+			combinedQueryParameters.PositionalParameterValues = positionalParameterValues.ToArray();
 			return combinedQueryParameters;
 		}
 
 		private void ThrowIfKeyAlreadyExists(string key)
 		{
 			if (criteriaResultPositions.ContainsKey(key))
-			{
 				throw new InvalidOperationException(String.Format("The key '{0}' already exists", key));
-			}
 		}
 	}
 }

@@ -26,7 +26,7 @@ namespace NHibernate.Proxy.DynamicProxy
 		private static readonly MethodInfo setType = typeof(SerializationInfo).GetMethod("SetType", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(System.Type) }, null);
 
 		private static readonly MethodInfo addValue = typeof (SerializationInfo).GetMethod("AddValue", BindingFlags.Public | BindingFlags.Instance, null,
-		                                                                                   new[] {typeof (string), typeof (object)}, null);
+																						   new[] {typeof (string), typeof (object)}, null);
 
 		public ProxyFactory()
 			: this(new DefaultyProxyMethodBuilder()) {}
@@ -67,21 +67,27 @@ namespace NHibernate.Proxy.DynamicProxy
 		public System.Type CreateProxyType(System.Type baseType, params System.Type[] interfaces)
 		{
 			System.Type[] baseInterfaces = ReferenceEquals(null, interfaces) ? new System.Type[0] : interfaces.Where(t => t != null).ToArray();
-			// Reuse the previous results, if possible
-			if (Cache.Contains(baseType, baseInterfaces))
+			
+			System.Type proxyType;
+
+			// Reuse the previous results, if possible, Fast path without locking.
+			if (Cache.TryGetProxyType(baseType, baseInterfaces, out proxyType))
+				return proxyType;
+
+			lock (Cache)
 			{
-				return Cache.GetProxyType(baseType, baseInterfaces);
+				// Recheck in case we got interrupted.
+				if (!Cache.TryGetProxyType(baseType, baseInterfaces, out proxyType))
+				{
+					proxyType = CreateUncachedProxyType(baseType, baseInterfaces);
+
+					// Cache the proxy type
+					if (proxyType != null && Cache != null)
+						Cache.StoreProxyType(proxyType, baseType, baseInterfaces);
+				}
+
+				return proxyType;
 			}
-
-			System.Type result = CreateUncachedProxyType(baseType, baseInterfaces);
-
-			// Cache the proxy type
-			if (result != null && Cache != null)
-			{
-				Cache.StoreProxyType(result, baseType, baseInterfaces);
-			}
-
-			return result;
 		}
 
 		private System.Type CreateUncachedProxyType(System.Type baseType, System.Type[] baseInterfaces)
@@ -93,10 +99,10 @@ namespace NHibernate.Proxy.DynamicProxy
 
 			var name = new AssemblyName(assemblyName);
 			AssemblyBuilder assemblyBuilder = ProxyAssemblyBuilder.DefineDynamicAssembly(currentDomain, name);
-			ModuleBuilder moduleBuilder = ProxyAssemblyBuilder.DefineDynamicModule(moduleName);
+			ModuleBuilder moduleBuilder = ProxyAssemblyBuilder.DefineDynamicModule(assemblyBuilder, moduleName);
 
 			TypeAttributes typeAttributes = TypeAttributes.AutoClass | TypeAttributes.Class |
-			                                TypeAttributes.Public | TypeAttributes.BeforeFieldInit;
+											TypeAttributes.Public | TypeAttributes.BeforeFieldInit;
 
 			var interfaces = new HashSet<System.Type>();
 			interfaces.Merge(baseInterfaces);
@@ -141,7 +147,7 @@ namespace NHibernate.Proxy.DynamicProxy
 			AddSerializationSupport(baseType, baseInterfaces, typeBuilder, interceptorField, defaultConstructor);
 			System.Type proxyType = typeBuilder.CreateType();
 
-			ProxyAssemblyBuilder.Save();
+			ProxyAssemblyBuilder.Save(assemblyBuilder);
 			return proxyType;
 		}
 
@@ -176,8 +182,8 @@ namespace NHibernate.Proxy.DynamicProxy
 		private static ConstructorBuilder DefineConstructor(TypeBuilder typeBuilder, System.Type parentType)
 		{
 			const MethodAttributes constructorAttributes = MethodAttributes.Public |
-			                                               MethodAttributes.HideBySig | MethodAttributes.SpecialName |
-			                                               MethodAttributes.RTSpecialName;
+														   MethodAttributes.HideBySig | MethodAttributes.SpecialName |
+														   MethodAttributes.RTSpecialName;
 
 			ConstructorBuilder constructor =
 				typeBuilder.DefineConstructor(constructorAttributes, CallingConventions.Standard, new System.Type[0]);
@@ -203,7 +209,7 @@ namespace NHibernate.Proxy.DynamicProxy
 		private static void ImplementGetObjectData(System.Type baseType, System.Type[] baseInterfaces, TypeBuilder typeBuilder, FieldInfo interceptorField)
 		{
 			const MethodAttributes attributes = MethodAttributes.Public | MethodAttributes.HideBySig |
-			                                    MethodAttributes.Virtual;
+												MethodAttributes.Virtual;
 			var parameterTypes = new[] {typeof (SerializationInfo), typeof (StreamingContext)};
 
 			MethodBuilder methodBuilder =
@@ -254,12 +260,12 @@ namespace NHibernate.Proxy.DynamicProxy
 		private static void DefineSerializationConstructor(TypeBuilder typeBuilder, FieldInfo interceptorField, ConstructorBuilder defaultConstructor)
 		{
 			const MethodAttributes constructorAttributes = MethodAttributes.Public |
-			                                               MethodAttributes.HideBySig | MethodAttributes.SpecialName |
-			                                               MethodAttributes.RTSpecialName;
+														   MethodAttributes.HideBySig | MethodAttributes.SpecialName |
+														   MethodAttributes.RTSpecialName;
 
 			var parameterTypes = new[] {typeof (SerializationInfo), typeof (StreamingContext)};
 			ConstructorBuilder constructor = typeBuilder.DefineConstructor(constructorAttributes,
-			                                                               CallingConventions.Standard, parameterTypes);
+																		   CallingConventions.Standard, parameterTypes);
 
 			ILGenerator IL = constructor.GetILGenerator();
 
